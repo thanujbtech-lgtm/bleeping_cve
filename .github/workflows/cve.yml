@@ -1,28 +1,38 @@
 name: Bleeping CVE Automation
 
 on:
+  workflow_dispatch:
   schedule:
     - cron: "0 * * * *"   # every hour
-  workflow_dispatch:
+
+permissions:
+  contents: write   # 🔥 IMPORTANT (fixes exit code 128)
 
 jobs:
   run:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - run: python bleeping.py
+      - name: Run CVE Script
+        run: python bleeping.py
 
-      - run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@github.com"
+      - name: Commit and Push Excel
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
           git add data.xlsx
           git commit -m "update CVEs" || echo "no changes"
           git push
