@@ -4,6 +4,7 @@ import feedparser
 from bs4 import BeautifulSoup
 from openpyxl import Workbook, load_workbook
 import os
+from datetime import datetime
 
 # ================= CONFIG =================
 
@@ -37,19 +38,20 @@ def load_existing():
     wb = load_workbook(FILE)
     ws = wb.active
 
+    # Only CVE used for uniqueness
     return {row[0] for row in ws.iter_rows(min_row=2, values_only=True) if row[0]}
 
-def save_new(cves):
+def save_new(data):
     if not os.path.exists(FILE):
         wb = Workbook()
         ws = wb.active
-        ws.append(["CVE"])
+        ws.append(["CVE", "DATE", "LINK"])   # 🔥 3 columns
     else:
         wb = load_workbook(FILE)
         ws = wb.active
 
-    for c in cves:
-        ws.append([c])
+    for cve, date, link in data:
+        ws.append([cve, date, link])
 
     wb.save(FILE)
 
@@ -61,24 +63,35 @@ def main():
     feed = feedparser.parse(RSS_URL)
 
     existing = load_existing()
-    new_cves = set()
+    new_data = set()
 
     for entry in feed.entries:
-        print("\nArticle:", entry.title)
 
-        cves = extract_cves(entry.link)
+        if not hasattr(entry, "published_parsed"):
+            continue
+
+        pub = datetime(*entry.published_parsed[:6])
+        date_str = pub.strftime("%Y-%m-%d")
+
+        link = entry.link
+
+        print("\nArticle:", entry.title)
+        print("Date:", date_str)
+        print("Link:", link)
+
+        cves = extract_cves(link)
 
         if cves:
             print("CVEs:", cves)
 
         for c in cves:
             if c not in existing:
-                new_cves.add(c)
+                new_data.add((c, date_str, link))
                 existing.add(c)
 
-    if new_cves:
-        save_new(new_cves)
-        print("\nAdded CVEs:", new_cves)
+    if new_data:
+        save_new(new_data)
+        print("\nAdded:", new_data)
     else:
         print("\nNo new CVEs")
 
