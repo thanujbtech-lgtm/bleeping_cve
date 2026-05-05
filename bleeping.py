@@ -3,8 +3,8 @@ import re
 import feedparser
 from bs4 import BeautifulSoup
 from openpyxl import Workbook, load_workbook
-import os
 from datetime import datetime
+import os
 
 # ================= CONFIG =================
 
@@ -31,27 +31,38 @@ def extract_cves(url):
     raw = re.findall(CVE_PATTERN, text, re.IGNORECASE)
     return {clean_cve(c) for c in raw}
 
-def load_existing():
+def load_existing_rows():
     if not os.path.exists(FILE):
-        return set()
+        return []
 
     wb = load_workbook(FILE)
     ws = wb.active
 
-    # Only CVE used for uniqueness
-    return {row[0] for row in ws.iter_rows(min_row=2, values_only=True) if row[0]}
+    rows = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if row[0]:
+            rows.append(row)
 
-def save_new(data):
-    if not os.path.exists(FILE):
-        wb = Workbook()
-        ws = wb.active
-        ws.append(["CVE", "DATE", "LINK"])   # 🔥 3 columns
-    else:
-        wb = load_workbook(FILE)
-        ws = wb.active
+    return rows
 
-    for cve, date, link in data:
-        ws.append([cve, date, link])
+def load_existing_keys():
+    rows = load_existing_rows()
+    return {(r[0], r[2]) for r in rows}
+
+def save_all(rows):
+    wb = Workbook()
+    ws = wb.active
+
+    ws.append(["CVE", "DATE", "LINK"])
+
+    # 🔥 SORT OLDEST → NEWEST
+    rows_sorted = sorted(
+        rows,
+        key=lambda x: datetime.strptime(x[1], "%Y-%m-%d")
+    )
+
+    for r in rows_sorted:
+        ws.append(r)
 
     wb.save(FILE)
 
@@ -62,8 +73,10 @@ def main():
 
     feed = feedparser.parse(RSS_URL)
 
-    existing = load_existing()
-    new_data = set()
+    existing_rows = load_existing_rows()
+    existing_keys = load_existing_keys()
+
+    new_rows = []
 
     for entry in feed.entries:
 
@@ -72,12 +85,10 @@ def main():
 
         pub = datetime(*entry.published_parsed[:6])
         date_str = pub.strftime("%Y-%m-%d")
-
         link = entry.link
 
         print("\nArticle:", entry.title)
         print("Date:", date_str)
-        print("Link:", link)
 
         cves = extract_cves(link)
 
@@ -85,15 +96,19 @@ def main():
             print("CVEs:", cves)
 
         for c in cves:
-            if c not in existing:
-                new_data.add((c, date_str, link))
-                existing.add(c)
+            key = (c, link)
 
-    if new_data:
-        save_new(new_data)
-        print("\nAdded:", new_data)
+            if key not in existing_keys:
+                new_rows.append((c, date_str, link))
+                existing_keys.add(key)
+
+    all_rows = existing_rows + new_rows
+
+    if new_rows:
+        save_all(all_rows)
+        print("\nAdded & Sorted (Old → New):", new_rows)
     else:
-        print("\nNo new CVEs")
+        print("\nNo new data")
 
 # ================= RUN =================
 
