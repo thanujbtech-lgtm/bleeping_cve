@@ -1,4 +1,4 @@
-# Bleeping CVE
+# Bleeping Computer CVE Intelligence Collector
 
 Automated CVE scraper from Bleeping Computer RSS feed and articles.
 
